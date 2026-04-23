@@ -1,4 +1,4 @@
-name: Get Bing Wallpaper (Custom Template Edition)
+name: Get Bing Wallpaper
 on:
   schedule:
     - cron: '0 0 * * *'
