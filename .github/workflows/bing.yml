@@ -39,16 +39,17 @@ jobs:
           fetch-depth: 1
 
       - name: Fetch, Process and Push
+        # 将输入参数作为环境变量传入，彻底解决 Cron 和手动触发默认值不一致的问题
+        env:
+          BASE_PATH: ${{ inputs.base_path || 'probe/images/bing-images' }}
+          TEMPLATE: ${{ inputs.naming_template || '{date}-{original}-{res}' }}
+          RES_MODE: ${{ inputs.resolution || 'UHD' }}
+          MD5_PATH: ${{ inputs.md5_file_path || 'probe/images/bing-images/.md5_history' }}
         run: |
           # 开启严格模式：命令错误/变量未定义/管道错误时立即退出
           set -euo pipefail
 
-          # 1. 变量初始化（兼容定时触发和手动触发）
-          BASE_PATH="${{ github.event.inputs.base_path || 'bing-images' }}"
-          TEMPLATE="${{ github.event.inputs.naming_template || '{date}-{original}-{res}' }}"
-          RES_MODE="${{ github.event.inputs.resolution || 'UHD' }}"
-          MD5_PATH="${{ github.event.inputs.md5_file_path || '.md5_history' }}"
-          
+          # 1. 变量初始化
           YEAR_MONTH="$(date +%Y/%m)"
           FULL_SAVE_PATH="${BASE_PATH}/${YEAR_MONTH}"
           mkdir -p "$FULL_SAVE_PATH"
@@ -93,10 +94,11 @@ jobs:
 
           # 6. 解析模板变量生成文件名
           V_DATE="$(date +%Y-%m-%d)"
+          # 解析原名逻辑完美：去掉 id= 以及最后一个下划线后面的内容(地区后缀)
           V_ORIGINAL=$(echo "$API_DATA" | jq -r '.images[0].urlbase' | sed 's/.*id=//; s/_[^_]*$//')
           [[ "$RES_MODE" == "UHD" ]] && V_RES="3840x2160" || V_RES="1920x1080"
           
-          V_SEQ_NUM=$(find "$FULL_SAVE_PATH" -maxdepth 1 -type f | wc -l)
+          V_SEQ_NUM=$(find "$FULL_SAVE_PATH" -maxdepth 1 -type f 2>/dev/null | wc -l || echo 0)
           V_SEQ=$(printf "%03d" $((V_SEQ_NUM + 1)))
 
           FILENAME="$TEMPLATE"
@@ -116,7 +118,7 @@ jobs:
           echo "$NEW_MD5" >> "$MD5_PATH"
           echo "成功归档: ${FULL_SAVE_PATH}/${FILENAME}"
 
-          # 8. 提交推送（仅在有新文件时执行，变量同会话直接可用，无空路径问题）
+          # 8. 提交推送
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add "$BASE_PATH" "$MD5_PATH"
